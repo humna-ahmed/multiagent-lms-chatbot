@@ -1,37 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Student Login</title>
+    <meta charset="UTF-8">
+    <title>Student Login | AI LMS</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
-<h2>LMS Login</h2>
+<div class="login-container">
+    <div class="login-card">
 
-<input type="text" id="reg" placeholder="Registration No">
-<input type="password" id="pass" placeholder="Password">
+        <div class="login-header">
+            <h1>AI-Powered LMS</h1>
+            <p>Student Portal</p>
+        </div>
 
-<button onclick="login()">Login</button>
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="reg">Registration Number</label>
+                <input type="text" id="reg" placeholder="e.g. FA21-CS-001" required>
+            </div>
+
+            <div class="input-group">
+                <label for="pass">Password</label>
+                <input type="password" id="pass" placeholder="Enter your password" required>
+            </div>
+
+            <button type="submit" class="login-btn">
+                Login
+            </button>
+        </form>
+
+        <div class="footer-text">
+            © 2026 Final Year Project • AI-Driven LMS
+        </div>
+
+    </div>
+</div>
 
 <script>
-function login() {
-    fetch("http://127.0.0.1:5000/login", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-    registration_no: document.getElementById("reg").value,
-    password: document.getElementById("pass").value
-})
-})
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            localStorage.setItem("student_id", data.student_id);
-            window.location.href = "index.html";
-        } else {
-            alert("Invalid credentials");
-        }
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const reg = document.getElementById("reg").value;
+    const pass = document.getElementById("pass").value;
+
+    const response = await fetch("http://127.0.0.1:5000/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            registration_no: reg,
+            password: pass
+        })
     });
-}
+
+    const data = await response.json();
+
+    if (data.success) {
+        window.location.href = `http://localhost:8501/?student_id=${data.student_id}`;
+    } else {
+        alert("Invalid credentials. Please try again.");
+    }
+});
 </script>
 
 </body>
