@@ -1,5 +1,6 @@
 def fmt(x):
-    return f"{x:.2f}"
+    return f"{float(x):.2f}"
+
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -8,8 +9,25 @@ import pandas as pd
 # PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(
-    page_title="Student LMS Dashboard",
+    page_title="Student LMS",
     layout="wide"
+)
+
+# --------------------------------------------------
+# SIDEBAR NAVIGATION
+# --------------------------------------------------
+st.sidebar.title("📘 LMS Navigation")
+
+page = st.sidebar.radio(
+    "Navigate",
+    [
+        "Personal Info",
+        "Dashboard",
+        "Quizzes",
+        "Assignments",
+        "Attendance",
+        "Chatbot"
+    ]
 )
 
 # --------------------------------------------------
@@ -18,7 +36,7 @@ st.set_page_config(
 DB_PATH = "backend/database/lms.db"
 
 # --------------------------------------------------
-# AUTH CHECK (VERY IMPORTANT)
+# AUTH CHECK
 # --------------------------------------------------
 student_id = st.query_params.get("student_id")
 
@@ -35,26 +53,21 @@ cur = conn.cursor()
 # --------------------------------------------------
 # FETCH STUDENT INFO
 # --------------------------------------------------
-cur.execute(
-    "SELECT name, registration_no FROM students WHERE student_id = ?",
-    (student_id,)
-)
+cur.execute("""
+    SELECT name, registration_no, semester
+    FROM students
+    WHERE student_id = ?
+""", (student_id,))
 student = cur.fetchone()
 
 if not student:
     st.error("Student not found.")
     st.stop()
 
-student_name, registration_no = student
+student_name, registration_no, semester = student
 
 # --------------------------------------------------
-# HEADER
-# --------------------------------------------------
-st.title("🎓 Student LMS Dashboard")
-st.markdown(f"### Welcome, **{student_name}** ({registration_no})")
-
-# --------------------------------------------------
-# FETCH COURSES FOR STUDENT
+# FETCH COURSES
 # --------------------------------------------------
 cur.execute("""
     SELECT DISTINCT c.course_id, c.course_name
@@ -62,111 +75,200 @@ cur.execute("""
     JOIN marks m ON m.course_id = c.course_id
     WHERE m.student_id = ?
 """, (student_id,))
-
 courses = cur.fetchall()
-
-if not courses:
-    st.warning("No courses found for this student.")
-    conn.close()
-    st.stop()
-
 course_map = {name: cid for cid, name in courses}
+course_names = list(course_map.keys())
 
 # --------------------------------------------------
-# COURSE MULTI-SELECT (TICK DROPDOWN)
+# HELPER: PAGE-SCOPED COURSE SELECTOR
 # --------------------------------------------------
-selected_courses = st.multiselect(
-    "📚 Select course(s) to view:",
-    options=list(course_map.keys()),
-    default=[list(course_map.keys())[0]]
-)
+def course_selector(page_key):
+    selector_key = f"courses_{page_key}"
 
-# --------------------------------------------------
-# LOOP THROUGH SELECTED COURSES
-# --------------------------------------------------
-for course_name in selected_courses:
-    course_id = course_map[course_name]
+    options = ["Select All Courses"] + course_names
+
+    selected = st.multiselect(
+        "📚 Select course(s) to view",
+        options=options,
+        key=selector_key
+    )
+
+    if "Select All Courses" in selected:
+        return course_names
+
+    return selected
+
+
+# ==================================================
+# PAGE: PERSONAL INFO
+# ==================================================
+if page == "Personal Info":
+
+    st.title("👤 Personal Information")
+
+    col1, col2 = st.columns(2)
+    col1.metric("Name", student_name)
+    col1.metric("Registration No", registration_no)
+
+    col2.metric("Semester", semester)
+    col2.metric("Student ID", student_id)
 
     st.markdown("---")
-    st.subheader(f"📘 {course_name}")
+    st.subheader("📚 Enrolled Courses")
 
-    # -----------------------------
-    # ATTENDANCE
-    # -----------------------------
-    cur.execute("""
-        SELECT classes_attended, total_classes
-        FROM attendance
-        WHERE student_id = ? AND course_id = ?
-    """, (student_id, course_id))
+    for course in course_names:
+        st.write(f"• {course}")
 
-    att = cur.fetchone()
-    attendance_pct = round((att[0] / att[1]) * 100, 1) if att else 0
+# ==================================================
+# PAGE: DASHBOARD
+# ==================================================
+elif page == "Dashboard":
 
-    # -----------------------------
-    # MARKS
-    # -----------------------------
-    cur.execute("""
-        SELECT quiz1, quiz2, quiz3, quiz4,
-               assignment1, assignment2, assignment3, assignment4,
-               midterm
-        FROM marks
-        WHERE student_id = ? AND course_id = ?
-    """, (student_id, course_id))
+    st.title("📊 Academic Overview")
 
-    marks = cur.fetchone()
+    selected_courses = course_selector("dashboard")
 
-    if marks:
-        quizzes = {f"Quiz {i+1}": fmt(m) for i, m in enumerate(marks[:4])}
-        assignments = {f"Assignment {i+1}": fmt(m) for i, m in enumerate(marks[4:8])}
-        midterm = fmt(marks[8])
-
-        total_quiz = fmt(sum(float(v) for v in quizzes.values()))
-        total_assignment = fmt(sum(float(v) for v in assignments.values()))
-
-        # Simple predicted final (out of 50)
-        predicted_final = fmt(
-    50 * ((float(total_quiz) + float(total_assignment) + float(midterm)) / 50)
-)
+    if not selected_courses:
+        st.info("ℹ️ Please select one or more courses to view academic overview.")
     else:
-        quizzes, assignments = {}, {}
-        midterm = total_quiz = total_assignment = predicted_final = 0
+        for course_name in selected_courses:
+            course_id = course_map[course_name]
+            st.markdown("---")
+            st.subheader(course_name)
 
-    # --------------------------------------------------
-    # UI LAYOUT
-    # --------------------------------------------------
-    col1, col2 = st.columns([1.1, 1])
+            cur.execute("""
+                SELECT classes_attended, total_classes
+                FROM attendance
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            att = cur.fetchone()
+            attendance_pct = round((att[0] / att[1]) * 100, 2) if att else 0
 
-    with col1:
-        st.metric("📊 Attendance", f"{attendance_pct}%")
-        st.progress(int(attendance_pct))
+            cur.execute("""
+                SELECT quiz1, quiz2, quiz3, quiz4,
+                       assignment1, assignment2, assignment3, assignment4,
+                       midterm
+                FROM marks
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            m = cur.fetchone()
 
-        with st.expander("📝 Quiz Details"):
-            st.table(pd.DataFrame.from_dict(quizzes, orient="index", columns=["Marks"]))
-            st.write(f"**Total:** {total_quiz} / 10")
+            quiz_total = round(sum(m[:4]), 2)
+            assignment_total = round(sum(m[4:8]), 2)
+            midterm = round(m[8], 2)
 
-        with st.expander("📂 Assignment Details"):
-            st.table(pd.DataFrame.from_dict(assignments, orient="index", columns=["Marks"]))
-            st.write(f"**Total:** {total_assignment} / 20")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Attendance %", f"{fmt(attendance_pct)}%")
+            col2.metric("Quiz Total", fmt(quiz_total))
+            col3.metric("Assignment Total", fmt(assignment_total))
 
-        st.metric("🧠 Midterm", f"{midterm} / 20")
-        st.metric("🔮 Predicted Final", f"{predicted_final} / 50")
+            chart_df = pd.DataFrame({
+                "Assessment": ["Quizzes", "Assignments", "Midterm"],
+                "Score": [quiz_total, assignment_total, midterm]
+            })
+            st.bar_chart(chart_df.set_index("Assessment"))
 
-    with col2:
-        chart_df = pd.DataFrame({
-            "Assessment": (
-                list(quizzes.keys())
-                + list(assignments.keys())
-                + ["Midterm", "Final (Predicted)"]
-            ),
-            "Score": (
-    [float(v) for v in quizzes.values()]
-    + [float(v) for v in assignments.values()]
-    + [float(midterm), float(predicted_final)]
-)
+# ==================================================
+# PAGE: QUIZZES
+# ==================================================
+elif page == "Quizzes":
 
-        })
+    st.title("📝 Quizzes")
 
-        st.bar_chart(chart_df.set_index("Assessment"))
+    selected_courses = course_selector("quizzes")
+
+    if not selected_courses:
+        st.info("ℹ️ Please select a course to view quizzes.")
+    else:
+        for course_name in selected_courses:
+            course_id = course_map[course_name]
+            st.subheader(course_name)
+
+            cur.execute("""
+                SELECT quiz1, quiz2, quiz3, quiz4
+                FROM marks
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            q = cur.fetchone()
+
+            df = pd.DataFrame({
+                "Quiz": ["Quiz 1", "Quiz 2", "Quiz 3", "Quiz 4"],
+                "Marks": [fmt(x) for x in q]
+            })
+            st.table(df)
+
+# ==================================================
+# PAGE: ASSIGNMENTS
+# ==================================================
+elif page == "Assignments":
+
+    st.title("📂 Assignments")
+
+    selected_courses = course_selector("assignments")
+
+    if not selected_courses:
+        st.info("ℹ️ Please select a course to view assignments.")
+    else:
+        for course_name in selected_courses:
+            course_id = course_map[course_name]
+            st.subheader(course_name)
+
+            cur.execute("""
+                SELECT assignment1, assignment2, assignment3, assignment4
+                FROM marks
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            a = cur.fetchone()
+
+            df = pd.DataFrame({
+                "Assignment": [
+                    "Assignment 1",
+                    "Assignment 2",
+                    "Assignment 3",
+                    "Assignment 4"
+                ],
+                "Marks": [fmt(x) for x in a]
+            })
+            st.table(df)
+
+# ==================================================
+# PAGE: ATTENDANCE
+# ==================================================
+elif page == "Attendance":
+
+    st.title("📅 Attendance")
+
+    selected_courses = course_selector("attendance")
+
+    if not selected_courses:
+        st.info("ℹ️ Please select a course to view attendance.")
+    else:
+        for course_name in selected_courses:
+            course_id = course_map[course_name]
+            st.subheader(course_name)
+
+            cur.execute("""
+                SELECT classes_attended, total_classes
+                FROM attendance
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            att = cur.fetchone()
+
+            attendance_pct = round((att[0] / att[1]) * 100, 2) if att else 0
+            st.metric("Attendance %", f"{fmt(attendance_pct)}%")
+            st.progress(int(attendance_pct))
+
+# ==================================================
+# PAGE: CHATBOT
+# ==================================================
+elif page == "Chatbot":
+
+    st.title("🤖 LMS Assistant")
+    st.info("Ask questions about your academic performance.")
+
+    chainlit_url = "http://localhost:8000"
+    st.components.v1.iframe(chainlit_url, height=650, scrolling=True)
+    st.markdown(f"[🔗 Open chatbot in new tab]({chainlit_url})")
 
 # --------------------------------------------------
 # CLOSE DB
