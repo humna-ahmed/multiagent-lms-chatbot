@@ -259,16 +259,50 @@ elif page == "Attendance":
             st.progress(int(attendance_pct))
 
 # ==================================================
-# PAGE: CHATBOT
+# PAGE: CHATBOT (STREAMLIT NATIVE)
 # ==================================================
 elif page == "Chatbot":
 
     st.title("🤖 LMS Assistant")
-    st.info("Ask questions about your academic performance.")
+    st.caption("Ask questions about your academics, attendance, or performance.")
 
-    chainlit_url = "http://localhost:8000"
-    st.components.v1.iframe(chainlit_url, height=650, scrolling=True)
-    st.markdown(f"[🔗 Open chatbot in new tab]({chainlit_url})")
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display previous messages
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # User input
+    prompt = st.chat_input("Ask me something...")
+
+    if prompt:
+        # Store user message
+        st.session_state.messages.append(
+            {"role": "user", "content": prompt}
+        )
+
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # -----------------------------
+        # TEMP BOT RESPONSE (PLACEHOLDER)
+        # -----------------------------
+        bot_reply = (
+            f"Hi {student_name}! 👋\n\n"
+            "I'm your LMS assistant.\n\n"
+            "Soon I'll be connected to your courses, marks, and attendance "
+            "using AI. For now, this is a demo response."
+        )
+
+        st.session_state.messages.append(
+            {"role": "assistant", "content": bot_reply}
+        )
+
+        with st.chat_message("assistant"):
+            st.markdown(bot_reply)
 
 # --------------------------------------------------
 # CLOSE DB
