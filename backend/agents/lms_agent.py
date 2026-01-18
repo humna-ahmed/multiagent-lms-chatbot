@@ -1,8 +1,15 @@
-import sqlite3
+# agents/lms_agent.py
 
-def lms_agent(student_id):
-    conn = sqlite3.connect("backend/database/lms.db")
-    cur = conn.cursor()
-    cur.execute("SELECT AVG(marks) FROM quizzes WHERE student_id=?", (student_id,))
-    quiz_avg = cur.fetchone()[0] or 0
-    return f"Your average quiz score is {quiz_avg}/2.5"
+from . import Agent
+
+lms_agent = Agent(
+    name="LMS Agent",
+    instructions="""
+    You answer questions by retrieving LMS information.
+    Examples:
+    - Quiz marks
+    - Assignment marks
+    - Attendance
+    Respond clearly and concisely.
+    """
+)

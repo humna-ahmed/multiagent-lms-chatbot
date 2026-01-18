@@ -1,2 +1,14 @@
-def planner_agent(student_id):
-    return "Study 5 hours daily for weak courses, 2 hours for strong ones."
+# agents/planner_agent.py
+
+from . import Agent
+
+planner_agent = Agent(
+    name="Planner Agent",
+    instructions="""
+    You create a personalized study or rescue plan.
+    Recommend:
+    - Which course to prioritize
+    - How many hours to study
+    - What to focus on
+    """
+)

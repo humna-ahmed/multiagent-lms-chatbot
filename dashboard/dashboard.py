@@ -1,10 +1,18 @@
-def fmt(x):
-    return f"{float(x):.2f}"
-
+# dashboard/dashboard.py
 import streamlit as st
 import sqlite3
 import pandas as pd
+import sys
+import os
+import asyncio
+# --------------------------------------------------
+# ADD PARENT DIRECTORY TO PYTHON PATH (for agents)
+# --------------------------------------------------
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
 
+from agents import Agent  # if you need Agent class
+from backend.agents.triage_agent import triage_agent
 # --------------------------------------------------
 # PAGE CONFIG
 # --------------------------------------------------
@@ -12,6 +20,12 @@ st.set_page_config(
     page_title="Student LMS",
     layout="wide"
 )
+
+# --------------------------------------------------
+# HELPER FUNCTION
+# --------------------------------------------------
+def fmt(x):
+    return f"{float(x):.2f}"
 
 # --------------------------------------------------
 # SIDEBAR NAVIGATION
@@ -33,8 +47,9 @@ page = st.sidebar.radio(
 # --------------------------------------------------
 # DATABASE PATH
 # --------------------------------------------------
-DB_PATH = "backend/database/lms.db"
+DB_PATH = os.path.join(PROJECT_ROOT, "backend", "database", "lms.db")
 
+ 
 # --------------------------------------------------
 # AUTH CHECK
 # --------------------------------------------------
@@ -84,7 +99,6 @@ course_names = list(course_map.keys())
 # --------------------------------------------------
 def course_selector(page_key):
     selector_key = f"courses_{page_key}"
-
     options = ["Select All Courses"] + course_names
 
     selected = st.multiselect(
@@ -98,24 +112,19 @@ def course_selector(page_key):
 
     return selected
 
-
 # ==================================================
 # PAGE: PERSONAL INFO
 # ==================================================
 if page == "Personal Info":
-
     st.title("👤 Personal Information")
-
     col1, col2 = st.columns(2)
     col1.metric("Name", student_name)
     col1.metric("Registration No", registration_no)
-
     col2.metric("Semester", semester)
     col2.metric("Student ID", student_id)
 
     st.markdown("---")
     st.subheader("📚 Enrolled Courses")
-
     for course in course_names:
         st.write(f"• {course}")
 
@@ -123,9 +132,7 @@ if page == "Personal Info":
 # PAGE: DASHBOARD
 # ==================================================
 elif page == "Dashboard":
-
     st.title("📊 Academic Overview")
-
     selected_courses = course_selector("dashboard")
 
     if not selected_courses:
@@ -172,9 +179,7 @@ elif page == "Dashboard":
 # PAGE: QUIZZES
 # ==================================================
 elif page == "Quizzes":
-
     st.title("📝 Quizzes")
-
     selected_courses = course_selector("quizzes")
 
     if not selected_courses:
@@ -201,9 +206,7 @@ elif page == "Quizzes":
 # PAGE: ASSIGNMENTS
 # ==================================================
 elif page == "Assignments":
-
     st.title("📂 Assignments")
-
     selected_courses = course_selector("assignments")
 
     if not selected_courses:
@@ -235,9 +238,7 @@ elif page == "Assignments":
 # PAGE: ATTENDANCE
 # ==================================================
 elif page == "Attendance":
-
     st.title("📅 Attendance")
-
     selected_courses = course_selector("attendance")
 
     if not selected_courses:
@@ -257,52 +258,87 @@ elif page == "Attendance":
             attendance_pct = round((att[0] / att[1]) * 100, 2) if att else 0
             st.metric("Attendance %", f"{fmt(attendance_pct)}%")
             st.progress(int(attendance_pct))
-
 # ==================================================
-# PAGE: CHATBOT (STREAMLIT NATIVE)
+# PAGE: CHATBOT (STREAMLIT + TRIAGE AGENT)
 # ==================================================
 elif page == "Chatbot":
 
     st.title("🤖 LMS Assistant")
     st.caption("Ask questions about your academics, attendance, or performance.")
 
-    # Initialize chat history
+    # ----------------------------------
+    # Initialize session state
+    # ----------------------------------
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display previous messages
+    if "welcome_shown" not in st.session_state:
+        welcome_msg = (
+            "👋 Hello! I’m your **Academic AI Companion**.\n\n"
+            "I can help you:\n\n"
+            "1️⃣ Retrieve information from your LMS\n\n"
+            "2️⃣ Predict your final exam grades\n\n"
+            "3️⃣ Create a rescue or study plan\n\n\n"
+            "Ask me anything about your academics!"
+        )
+        st.session_state.messages.append(
+            {"role": "assistant", "content": welcome_msg}
+        )
+        st.session_state.welcome_shown = True
+
+    # ----------------------------------
+    # Display chat history
+    # ----------------------------------
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    # ----------------------------------
     # User input
+    # ----------------------------------
     prompt = st.chat_input("Ask me something...")
 
     if prompt:
-        # Store user message
+        # Show user message
         st.session_state.messages.append(
             {"role": "user", "content": prompt}
         )
-
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # -----------------------------
-        # TEMP BOT RESPONSE (PLACEHOLDER)
-        # -----------------------------
-        bot_reply = (
-            f"Hi {student_name}! 👋\n\n"
-            "I'm your LMS assistant.\n\n"
-            "Soon I'll be connected to your courses, marks, and attendance "
-            "using AI. For now, this is a demo response."
-        )
+        # ----------------------------------
+        # AI response
+        # ----------------------------------
+        try:
+            import asyncio
+            from backend.agents.triage_agent import triage_agent
+            from backend.agents.llm import GeminiLLM
 
+            llm_model = GeminiLLM()
+
+            bot_reply = asyncio.run(
+                triage_agent.handle_query(
+                    user_query=prompt,
+                    student_id=student_id,
+                    db_connection=conn,
+                    llm_model=llm_model
+                )
+            )
+
+        except Exception as e:
+            bot_reply = (
+                f"⚠️ Error: {e}\n\n"
+                "Currently unable to fetch answer.\n"
+                f"Hi {student_name}! 👋 I'm your LMS assistant demo."
+            )
+
+        # Store and display assistant reply
         st.session_state.messages.append(
             {"role": "assistant", "content": bot_reply}
         )
-
         with st.chat_message("assistant"):
             st.markdown(bot_reply)
+
 
 # --------------------------------------------------
 # CLOSE DB
