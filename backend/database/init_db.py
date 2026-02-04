@@ -7,6 +7,7 @@ DB_PATH = os.path.join(BASE_DIR, "lms.db")
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
+# Students table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS students (
     student_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS students (
     department TEXT
 )
 """)
+
 # Courses table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS courses (
@@ -25,25 +27,47 @@ CREATE TABLE IF NOT EXISTS courses (
 )
 """)
 
-# Marks table
+# Quizzes table - NEW TABLE for separate quiz marks
+cur.execute("""
+CREATE TABLE IF NOT EXISTS quizzes (
+    quiz_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER,
+    course_id INTEGER,
+    quiz_name TEXT,
+    marks_obtained REAL,
+    max_marks REAL,
+    FOREIGN KEY(student_id) REFERENCES students(student_id),
+    FOREIGN KEY(course_id) REFERENCES courses(course_id)
+)
+""")
+
+# Assignments table - NEW TABLE for separate assignment marks
+cur.execute("""
+CREATE TABLE IF NOT EXISTS assignments (
+    assignment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER,
+    course_id INTEGER,
+    assignment_name TEXT,
+    marks_obtained REAL,
+    max_marks REAL,
+    FOREIGN KEY(student_id) REFERENCES students(student_id),
+    FOREIGN KEY(course_id) REFERENCES courses(course_id)
+)
+""")
+
+# Marks table - for midterm and final (final will be NULL until predicted)
 cur.execute("""
 CREATE TABLE IF NOT EXISTS marks (
     mark_id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER,
     course_id INTEGER,
-    quiz1 REAL,
-    quiz2 REAL,
-    quiz3 REAL,
-    quiz4 REAL,
-    assignment1 REAL,
-    assignment2 REAL,
-    assignment3 REAL,
-    assignment4 REAL,
     midterm REAL,
+    final REAL,
     FOREIGN KEY(student_id) REFERENCES students(student_id),
     FOREIGN KEY(course_id) REFERENCES courses(course_id)
 )
 """)
+
 # Attendance table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS attendance (
@@ -59,5 +83,4 @@ CREATE TABLE IF NOT EXISTS attendance (
 
 conn.commit()
 conn.close()
-
 print("Database initialized at:", DB_PATH)

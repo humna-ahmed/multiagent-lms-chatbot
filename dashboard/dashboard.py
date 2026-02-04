@@ -395,38 +395,68 @@ if page == "🏠 Dashboard":
             att = cur.fetchone()
             attendance_pct = round((att[0] / att[1]) * 100, 2) if att else 0
 
+            # Fetch quiz total from new quizzes table
             cur.execute("""
-                SELECT quiz1, quiz2, quiz3, quiz4,
-                       assignment1, assignment2, assignment3, assignment4,
-                       midterm
+                SELECT SUM(marks_obtained)
+                FROM quizzes
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            quiz_result = cur.fetchone()
+            quiz_total = round(quiz_result[0], 2) if quiz_result[0] else 0
+            quiz_percentage = round((quiz_total / 10) * 100, 2)  # Out of 10
+
+            # Fetch assignment total from new assignments table
+            cur.execute("""
+                SELECT SUM(marks_obtained)
+                FROM assignments
+                WHERE student_id = ? AND course_id = ?
+            """, (student_id, course_id))
+            assign_result = cur.fetchone()
+            assignment_total = round(assign_result[0], 2) if assign_result[0] else 0
+            assign_percentage = round((assignment_total / 20) * 100, 2)  # Out of 20
+
+            # Fetch ONLY midterm from marks table (final is NULL)
+            cur.execute("""
+                SELECT midterm
                 FROM marks
                 WHERE student_id = ? AND course_id = ?
             """, (student_id, course_id))
-            m = cur.fetchone()
+            marks_result = cur.fetchone()
+            midterm = round(marks_result[0], 2) if marks_result else 0
+            midterm_percentage = round((midterm / 20) * 100, 2)  # Out of 20
 
-            quiz_total = round(sum(m[:4]), 2) if m else 0
-            assignment_total = round(sum(m[4:8]), 2) if m else 0
-            midterm = round(m[8], 2) if m else 0
+            # Calculate current total (without final)
+            current_total = quiz_total + assignment_total + midterm
+            current_percentage = round((current_total / 50) * 100, 2)  # Out of 50 (10+20+20)
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Attendance", f"{fmt(attendance_pct)}%", 
                          delta="Good" if attendance_pct >= 75 else "Low")
             with col2:
-                st.metric("Quizzes", fmt(quiz_total))
+                st.metric("Quizzes", f"{fmt(quiz_total)}/10", f"{fmt(quiz_percentage)}%")
             with col3:
-                st.metric("Assignments", fmt(assignment_total))
+                st.metric("Assignments", f"{fmt(assignment_total)}/20", f"{fmt(assign_percentage)}%")
             with col4:
-                st.metric("Midterm", fmt(midterm))
+                st.metric("Midterm", f"{fmt(midterm)}/20", f"{fmt(midterm_percentage)}%")
 
+            # Show current performance (without final)
+            st.markdown(f"**Current Performance: {fmt(current_total)}/50 ({fmt(current_percentage)}%)**")
+            st.caption("Final exam (50 marks) is pending - Ask the AI Assistant for predictions")
+            
+            # Progress bar for current marks
+            st.progress(current_percentage / 100)
+            
             chart_df = pd.DataFrame({
                 "Assessment": ["Quizzes", "Assignments", "Midterm"],
-                "Score": [quiz_total, assignment_total, midterm]
+                "Score": [quiz_total, assignment_total, midterm],
+                "Max": [10, 20, 20]
             })
-            st.bar_chart(chart_df.set_index("Assessment"), use_container_width=True)
+            
+            # Create a bar chart for current assessments only
+            st.bar_chart(chart_df.set_index("Assessment")[["Score", "Max"]], use_container_width=True)
             
             st.markdown("---")
-
 # ==================================================
 # PAGE: PERSONAL INFO
 # ==================================================
@@ -514,31 +544,45 @@ elif page == "📝 Quizzes":
             </div>
             """, unsafe_allow_html=True)
 
+            # Fetch quiz marks from new quizzes table
             cur.execute("""
-                SELECT quiz1, quiz2, quiz3, quiz4
-                FROM marks
+                SELECT quiz_name, marks_obtained, max_marks
+                FROM quizzes
                 WHERE student_id = ? AND course_id = ?
+                ORDER BY quiz_name
             """, (student_id, course_id))
-            q = cur.fetchone()
+            quizzes = cur.fetchall()
 
-            if q:
-                df = pd.DataFrame({
-                    "Quiz": ["Quiz 1", "Quiz 2", "Quiz 3", "Quiz 4"],
-                    "Marks Obtained": [fmt(x) for x in q]
-                })
+            if quizzes:
+                # Convert to DataFrame
+                quiz_data = []
+                total_obtained = 0
+                total_max = 0
+                
+                for quiz_name, marks_obtained, max_marks in quizzes:
+                    quiz_data.append({
+                        "Quiz": quiz_name,
+                        "Marks Obtained": fmt(marks_obtained),
+                        "Max Marks": fmt(max_marks),
+                        "Percentage": fmt((marks_obtained / max_marks) * 100) + "%"
+                    })
+                    total_obtained += marks_obtained
+                    total_max += max_marks
+                
+                df = pd.DataFrame(quiz_data)
                 
                 col1, col2 = st.columns([2, 1], gap="medium")
                 with col1:
                     st.dataframe(df, use_container_width=True, hide_index=True)
                 with col2:
                     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-                    st.metric("Total Quiz Marks", fmt(sum(q)))
-                    st.metric("Average", fmt(sum(q)/4))
+                    st.metric("Total Obtained", f"{fmt(total_obtained)}/10")
+                    st.metric("Average per Quiz", fmt(total_obtained / 4))
+                    st.metric("Quiz Percentage", fmt((total_obtained / 10) * 100) + "%")
             else:
                 st.info("No quiz data available for this course.")
             
             st.markdown("---")
-
 # ==================================================
 # PAGE: ASSIGNMENTS
 # ==================================================
@@ -559,36 +603,45 @@ elif page == "📂 Assignments":
             </div>
             """, unsafe_allow_html=True)
 
+            # Fetch assignment marks from new assignments table
             cur.execute("""
-                SELECT assignment1, assignment2, assignment3, assignment4
-                FROM marks
+                SELECT assignment_name, marks_obtained, max_marks
+                FROM assignments
                 WHERE student_id = ? AND course_id = ?
+                ORDER BY assignment_name
             """, (student_id, course_id))
-            a = cur.fetchone()
+            assignments = cur.fetchall()
 
-            if a:
-                df = pd.DataFrame({
-                    "Assignment": [
-                        "Assignment 1",
-                        "Assignment 2",
-                        "Assignment 3",
-                        "Assignment 4"
-                    ],
-                    "Marks Obtained": [fmt(x) for x in a]
-                })
+            if assignments:
+                # Convert to DataFrame
+                assign_data = []
+                total_obtained = 0
+                total_max = 0
+                
+                for assign_name, marks_obtained, max_marks in assignments:
+                    assign_data.append({
+                        "Assignment": assign_name,
+                        "Marks Obtained": fmt(marks_obtained),
+                        "Max Marks": fmt(max_marks),
+                        "Percentage": fmt((marks_obtained / max_marks) * 100) + "%"
+                    })
+                    total_obtained += marks_obtained
+                    total_max += max_marks
+                
+                df = pd.DataFrame(assign_data)
                 
                 col1, col2 = st.columns([2, 1], gap="medium")
                 with col1:
                     st.dataframe(df, use_container_width=True, hide_index=True)
                 with col2:
                     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-                    st.metric("Total Assignment Marks", fmt(sum(a)))
-                    st.metric("Average", fmt(sum(a)/4))
+                    st.metric("Total Obtained", f"{fmt(total_obtained)}/20")
+                    st.metric("Average per Assignment", fmt(total_obtained / 4))
+                    st.metric("Assignment Percentage", fmt((total_obtained / 20) * 100) + "%")
             else:
                 st.info("No assignment data available for this course.")
             
             st.markdown("---")
-
 # ==================================================
 # PAGE: ATTENDANCE
 # ==================================================
