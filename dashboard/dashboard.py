@@ -690,7 +690,7 @@ elif page == "📅 Attendance":
                 st.info("No attendance data available for this course.")
             
             st.markdown("---")
-
+            
 # ==================================================
 # PAGE: AI ASSISTANT (CHATBOT)
 # ==================================================
@@ -740,29 +740,50 @@ elif page == "🤖 AI Assistant":
             st.markdown(prompt)
 
         # ----------------------------------
-        # AI response
+        # AI response using OpenAI Agent SDK
         # ----------------------------------
         try:
-            from backend.agents.triage_agent import triage_agent
-            from backend.agents.llm import GeminiLLM
-
-            llm_model = GeminiLLM()
-
-            with st.spinner("🤔 Analyzing your query..."):
+            # Import the agent runner function
+            from backend.agents import run_agent_query
+            
+            with st.spinner("🤔 Analyzing with AI Agents..."):
+                # Use the new agent system - Note: using asyncio.run() to handle async
+                import asyncio
                 bot_reply = asyncio.run(
-                    triage_agent.handle_query(
+                    run_agent_query(
                         user_query=prompt,
                         student_id=student_id,
-                        db_connection=conn,
-                        llm_model=llm_model
+                        db_connection=conn
                     )
                 )
 
+        except ImportError as e:
+            # Fallback if agent system is not available
+            st.error(f"Agent system not available: {str(e)}")
+            bot_reply = (
+                f"⚠️ **Agent System Error**\n\n"
+                f"The AI agent system is currently unavailable. Please try again later.\n\n"
+                f"Error: `{str(e)}`"
+            )
+            
         except Exception as e:
+            # General error handling
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Agent Error in Dashboard: {str(e)}")
+            print(error_details)
+            
             bot_reply = (
                 f"⚠️ **System Error**\n\n"
                 f"I encountered an issue while processing your request: `{str(e)}`\n\n"
-                f"Hi {student_name}! 👋 I'm your LMS assistant. Please try rephrasing your question or contact support if the issue persists."
+                f"Hi {student_name}! 👋 Please try:\n"
+                f"1. Rephrasing your question\n"
+                f"2. Specifying the course name clearly\n"
+                f"3. Asking about a different aspect\n\n"
+                f"Examples:\n"
+                f"• \"What are my quiz marks in Calculus?\"\n"
+                f"• \"Predict my final score in Physics\"\n"
+                f"• \"Create a study plan for Programming\""
             )
 
         # Store and display assistant reply
@@ -771,7 +792,6 @@ elif page == "🤖 AI Assistant":
         )
         with st.chat_message("assistant"):
             st.markdown(bot_reply)
-
 # --------------------------------------------------
 # CLOSE DB
 # --------------------------------------------------
