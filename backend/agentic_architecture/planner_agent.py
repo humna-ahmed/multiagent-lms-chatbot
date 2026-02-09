@@ -1,12 +1,11 @@
 # backend/agents/planner_agent.py
 
 from agents import Agent
-from .llm import gemini_model
 from .tools import get_course_analysis, get_course_data
 
 planner_agent = Agent(
     name="Planner Agent",
-    model=gemini_model,
+    model="gemini-1.5-flash",
     instructions="""
     You are the Academic Planning Agent.
     

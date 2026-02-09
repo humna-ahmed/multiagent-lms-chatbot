@@ -1,12 +1,11 @@
 # backend/agents/lms_agent.py
 
 from agents import Agent
-from .llm import gemini_model
 from .tools import get_course_data, get_performance_data, get_course_analysis
 
 lms_agent = Agent(
     name="LMS Data Agent",
-    model=gemini_model,
+    model="gemini-1.5-flash",
     instructions="""
     You are the LMS Data Retrieval Agent.
     

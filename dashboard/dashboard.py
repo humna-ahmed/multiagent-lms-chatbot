@@ -6,13 +6,15 @@ import sys
 import os
 import asyncio
 
+
 # --------------------------------------------------
 # ADD PARENT DIRECTORY TO PYTHON PATH (for agents)
 # --------------------------------------------------
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from backend.agents.triage_agent import triage_agent
+
+from backend.agentic_architecture.triage_agent import triage_agent
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -744,7 +746,7 @@ elif page == "🤖 AI Assistant":
         # ----------------------------------
         try:
             # Import the agent runner function
-            from backend.agents import run_agent_query
+            from backend.agentic_architecture import run_agent_query
             
             with st.spinner("🤔 Analyzing with AI Agents..."):
                 # Use the new agent system - Note: using asyncio.run() to handle async
